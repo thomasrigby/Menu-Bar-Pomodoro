@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
+    />
+    <meta
+      http-equiv="X-Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
+    />
+    <title>Tomodoro</title> 
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-wrapper">
+      <div class="timer-container">
+        <div class="header">
+          <a href="graph.html" class="stats-link">
+            <svg class="stats-icon" viewBox="0 0 24 24">
+              <path class="stats-path" fill="none" stroke="#666" stroke-width="1.5" 
+                d="M3 3v18h18 M7 12l4-4 4 4 4-4"/>
+            </svg>
+          </a>
+        </div>
+        <audio id="timer-sound" src="sounds/timer-terminer-342934.mp3" preload="auto"></audio>
+        <div class="timer-display">
+          <div class="timer-section active" id="focus-section">
+            <div class="circular-timer">
+              <svg class="progress-ring" viewBox="0 0 100 100">
+                <circle class="progress-ring-circle focus-ring"
+                  cx="50"
+                  cy="50"
+                  r="45"
+                  stroke-width="2"
+                  stroke="#4CAF50"
+                  fill="transparent"
+                />
+              </svg>
+              <div class="timer-content">
+                <span class="label">Focus</span>
+                <div class="time" id="focus-time">
+                  <input type="number" class="digit-box" min="0" max="9" value="4">
+                  <input type="number" class="digit-box" min="0" max="9" value="0">
+                  <span class="separator">:</span>
+                  <input type="number" class="digit-box" min="0" max="5" value="0">
+                  <input type="number" class="digit-box" min="0" max="9" value="0">
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="timer-section hidden" id="break-section">
+            <div class="circular-timer">
+              <svg class="progress-ring" viewBox="0 0 100 100">
+                <circle class="progress-ring-circle break-ring"
+                  cx="50"
+                  cy="50"
+                  r="45"
+                  stroke-width="2"
+                  stroke="#f44336"
+                  fill="transparent"
+                />
+              </svg>
+              <div class="timer-content">
+                <span class="label">Break</span>
+                <div class="time" id="break-time">
+                  <input type="number" class="digit-box" min="0" max="9" value="0">
+                  <input type="number" class="digit-box" min="0" max="9" value="5">
+                  <span class="separator">:</span>
+                  <input type="number" class="digit-box" min="0" max="5" value="0">
+                  <input type="number" class="digit-box" min="0" max="9" value="0">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="controls">
+          <button id="start-focus" class="action-button" data-playing="false">
+            <svg class="play-icon" viewBox="0 0 24 24">
+              <path class="play-path" fill="none" stroke-width="1.5" d="M8 5v14l11-7z"/>
+              <path class="pause-path" fill="none" stroke-width="1.5" d="M9 7v10 M15 7v10"/>
+            </svg>
+          </button>
+          <button id="reset-timer" class="reset-text">Reset</button>
+        </div>
+      </div>
+    </div>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

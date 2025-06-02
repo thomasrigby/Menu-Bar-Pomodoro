@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline';"
+    />
+    <title>Tomodoro Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 4px;
+            background-color: white;
+            color: #333;
+            font-size: 12px;
+            height: 100vh;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background: white;
+            padding: 4px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            flex-shrink: 0;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-right: 10px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #f44336;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #4CAF50;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        .toggle-label {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .back-link {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            opacity: 0.7;
+            transition: all 0.2s;
+        }
+
+        .back-link:hover {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        .back-icon {
+            width: 100%;
+            height: 100%;
+        }
+
+        .back-path {
+            transition: stroke 0.2s;
+        }
+
+        .back-link:hover .back-path {
+            stroke: #0071e3;
+        }
+
+        select {
+            padding: 4px 8px;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            font-size: 11px;
+            background-color: white;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        select:hover {
+            border-color: #0071e3;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 150px;
+            margin-top: 4px;
+            margin-bottom: 4px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 4px;
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px solid #eee;
+            flex-shrink: 0;
+        }
+
+        .summary-item {
+            text-align: center;
+            padding: 2px;
+        }
+
+        .summary-item h3 {
+            margin: 0;
+            font-size: 9px;
+            color: #666;
+            margin-bottom: 0px;
+        }
+
+        .summary-item p {
+            margin: 0;
+            font-size: 11px;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="index.html" class="back-link" id="backButton">
+                <svg class="back-icon" viewBox="0 0 24 24">
+                    <path class="back-path" fill="none" stroke="#666" stroke-width="1.5" 
+                        d="M15 6l-6 6 6 6"/>
+                </svg>
+            </a>
+            <div class="controls">
+                <div class="toggle-container">
+                    <span class="toggle-label">Break</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="timeTypeToggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span class="toggle-label">Focus</span>
+                </div>
+                <select id="timeRange" onchange="updateGraph()">
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="ytd">Year to Date</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="focusChart"></canvas>
+        </div>
+
+        <div class="summary">
+            <div class="summary-item">
+                <h3>Total Time</h3>
+                <p id="totalTime">--</p>
+            </div>
+            <div class="summary-item">
+                <h3>Average Session</h3>
+                <p id="avgSession">--</p>
+            </div>
+            <div class="summary-item">
+                <h3>Sessions</h3>
+                <p id="totalSessions">--</p>
+            </div>
+            <div class="summary-item">
+                <h3>Completion Rate</h3>
+                <p id="completionRate">--</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let focusChart = null;
+        let currentTimeType = 'focus'; // Default to focus time
+
+        // Handle navigation and session completion
+        document.getElementById('backButton').addEventListener('click', async function(e) {
+            e.preventDefault(); // Prevent immediate navigation
+            
+            // Check if there's an ongoing session that needs to be completed
+            const savedState = localStorage.getItem('timerState');
+            if (savedState) {
+                const state = JSON.parse(savedState);
+                if (state.isRunning && state.currentSessionData) {
+                    // Complete the session as incomplete since user is navigating away
+                    try {
+                        const now = new Date();
+                        now.setHours(now.getHours() + 8); // Add 8 hours for UTC+8
+                        await window.electron.ipcRenderer.invoke('log-pomodoro-session', {
+                            startTime: now.toISOString(),
+                            duration: state.isFocusTime ? state.savedFocusTime : state.savedBreakTime,
+                            sessionType: state.isFocusTime ? 'focus' : 'break',
+                            completed: false
+                        });
+                    } catch (error) {
+                        console.error('Error logging incomplete session:', error);
+                    }
+                    
+                    // Update state to not running
+                    state.isRunning = false;
+                    localStorage.setItem('timerState', JSON.stringify(state));
+                }
+            }
+            
+            // Navigate back to the timer
+            window.location.href = 'index.html';
+        });
+
+        // Sync graph toggle with timer state
+        function syncWithTimerState() {
+            const savedState = localStorage.getItem('timerState');
+            if (savedState) {
+                const state = JSON.parse(savedState);
+                // Always default to focus time when opening the graph
+                const timeTypeToggle = document.getElementById('timeTypeToggle');
+                timeTypeToggle.checked = true;
+                currentTimeType = 'focus';
+                updateGraph();
+            }
+        }
+
+        // Call syncWithTimerState when the page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            // Set initial toggle state to focus
+            const timeTypeToggle = document.getElementById('timeTypeToggle');
+            timeTypeToggle.checked = true;
+            currentTimeType = 'focus';
+            
+            syncWithTimerState();
+            updateGraph();
+        });
+
+        // Format time function
+        function formatTime(minutes) {
+            if (!minutes || isNaN(minutes)) return '0m';
+            if (minutes < 60) return `${minutes}m`;
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+        }
+
+        // Update summary stats
+        function updateSummaryStats(summary) {
+            document.getElementById('totalTime').textContent = formatTime(summary.totalTime);
+            document.getElementById('avgSession').textContent = formatTime(summary.avgSession);
+            document.getElementById('totalSessions').textContent = summary.totalSessions;
+            document.getElementById('completionRate').textContent = `${summary.completionRate}%`;
+        }
+
+        // Add toggle event listener
+        document.getElementById('timeTypeToggle').addEventListener('change', function(e) {
+            currentTimeType = e.target.checked ? 'focus' : 'break';
+            updateGraph();
+        });
+
+        async function updateGraph() {
+            const timeRange = document.getElementById('timeRange').value;
+            try {
+                const data = await window.electron.ipcRenderer.invoke('get-graph-data', { 
+                    timeRange,
+                    timeType: currentTimeType
+                });
+                
+                if (focusChart) {
+                    focusChart.destroy();
+                }
+
+                const ctx = document.getElementById('focusChart').getContext('2d');
+                focusChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: currentTimeType === 'focus' ? 'Focus Time' : 'Break Time',
+                            data: data.times,
+                            borderColor: currentTimeType === 'focus' ? '#4CAF50' : '#f44336',
+                            backgroundColor: currentTimeType === 'focus' 
+                                ? 'rgba(76, 175, 80, 0.1)' 
+                                : 'rgba(244, 67, 54, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    title: function(context) {
+                                        const timeRange = document.getElementById('timeRange').value;
+                                        const label = context[0].label;
+                                        
+                                        switch(timeRange) {
+                                            case 'month':
+                                                const date = new Date();
+                                                return `${label} ${date.toLocaleString('default', { month: 'short' })}`;
+                                            default:
+                                                return label;
+                                        }
+                                    },
+                                    label: function(context) {
+                                        const dataIndex = context.dataIndex;
+                                        const sessions = data.summary.sessions[dataIndex];
+                                        const timeLabel = currentTimeType === 'focus' ? 'Focus' : 'Break';
+                                        return [
+                                            `${timeLabel} Time: ${formatTime(context.raw)}`,
+                                            `Sessions: ${sessions}`
+                                        ];
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: {
+                                    display: false
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    display: true,
+                                    color: '#f0f0f0'
+                                },
+                                ticks: {
+                                    display: false
+                                },
+                                border: {
+                                    display: false
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Update summary statistics
+                updateSummaryStats(data.summary);
+
+            } catch (error) {
+                console.error('Error updating graph:', error);
+            }
+        }
+    </script>
+</body>
+</html> 
