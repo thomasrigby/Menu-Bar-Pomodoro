@@ -62,14 +62,14 @@ class DBManager {
         return new Promise((resolve, reject) => {
             const query = `
                 SELECT 
-                    strftime('%H', datetime(start_time, '+8 hours')) as hour,
+                    strftime('%H', start_time) as hour,
                     COUNT(*) as total_sessions,
                     SUM(duration) as total_time,
                     SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed_sessions
                 FROM sessions
-                WHERE date(datetime(start_time, '+8 hours')) = date('now', 'localtime')
+                WHERE date(start_time) = date('now')
                 AND session_type = ?
-                GROUP BY strftime('%H', datetime(start_time, '+8 hours'))
+                GROUP BY strftime('%H', start_time)
                 ORDER BY hour
             `;
             
@@ -88,14 +88,14 @@ class DBManager {
         return new Promise((resolve, reject) => {
             const query = `
                 SELECT 
-                    date(datetime(start_time, '+8 hours')) as day,
+                    date(start_time) as day,
                     COUNT(*) as total_sessions,
                     SUM(duration) as total_time,
                     SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed_sessions
                 FROM sessions
-                WHERE date(datetime(start_time, '+8 hours')) >= date('now', '-6 days', 'localtime')
+                WHERE date(start_time) >= date('now', '-6 days')
                 AND session_type = ?
-                GROUP BY date(datetime(start_time, '+8 hours'))
+                GROUP BY date(start_time)
                 ORDER BY day
             `;
             
@@ -114,14 +114,14 @@ class DBManager {
         return new Promise((resolve, reject) => {
             const query = `
                 SELECT 
-                    strftime('%d', datetime(start_time, '+8 hours')) as day,
+                    strftime('%d', start_time) as day,
                     COUNT(*) as total_sessions,
                     SUM(duration) as total_time,
                     SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed_sessions
                 FROM sessions
-                WHERE strftime('%Y-%m', datetime(start_time, '+8 hours')) = strftime('%Y-%m', 'now', 'localtime')
+                WHERE strftime('%Y-%m', start_time) = strftime('%Y-%m', 'now')
                 AND session_type = ?
-                GROUP BY strftime('%d', datetime(start_time, '+8 hours'))
+                GROUP BY strftime('%d', start_time)
                 ORDER BY day
             `;
             
@@ -140,14 +140,14 @@ class DBManager {
         return new Promise((resolve, reject) => {
             const query = `
                 SELECT 
-                    strftime('%m', datetime(start_time, '+8 hours')) as month,
+                    strftime('%m', start_time) as month,
                     COUNT(*) as total_sessions,
                     SUM(duration) as total_time,
                     SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed_sessions
                 FROM sessions
-                WHERE strftime('%Y', datetime(start_time, '+8 hours')) = strftime('%Y', 'now', 'localtime')
+                WHERE strftime('%Y', start_time) = strftime('%Y', 'now')
                 AND session_type = ?
-                GROUP BY strftime('%m', datetime(start_time, '+8 hours'))
+                GROUP BY strftime('%m', start_time)
                 ORDER BY month
             `;
             

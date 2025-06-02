@@ -1,9 +1,16 @@
-const { app, ipcMain } = require('electron')
+const { app, ipcMain, Notification } = require('electron')
 const { menubar } = require('menubar')
 const path = require('path')
 const DBManager = require('./db-manager')
 
 let db;
+let timerInterval;
+let currentTimer = {
+  isRunning: false,
+  timeLeft: 0,
+  initialTime: 0,
+  isFocusTime: true
+};
 
 // Set the application icon
 if (process.platform === 'darwin') {
@@ -43,6 +50,65 @@ function secondsToMinutes(seconds) {
   if (!seconds || isNaN(seconds)) return 0;
   return Math.round(seconds / 60);
 }
+
+// Function to show notification
+function showTimerCompleteNotification(isFocusTime) {
+  const title = isFocusTime ? 'Focus Time Complete!' : 'Break Time Complete!';
+  const body = isFocusTime ? 'Time for a break!' : 'Ready to focus?';
+  
+  new Notification({
+    title: title,
+    body: body,
+    silent: true // We'll handle the sound separately
+  }).show();
+
+  // Send message to renderer to play sound
+  mb.window.webContents.send('play-sound');
+}
+
+// Timer management functions
+function startTimer(initialTime, isFocusTime) {
+  clearInterval(timerInterval);
+  currentTimer = {
+    isRunning: true,
+    timeLeft: initialTime,
+    initialTime,
+    isFocusTime
+  };
+  
+  timerInterval = setInterval(() => {
+    if (currentTimer.timeLeft <= 0) {
+      clearInterval(timerInterval);
+      currentTimer.isRunning = false;
+      showTimerCompleteNotification(currentTimer.isFocusTime);
+      mb.window.webContents.send('timer-complete', currentTimer);
+    } else {
+      currentTimer.timeLeft--;
+      mb.window.webContents.send('timer-tick', currentTimer);
+    }
+  }, 1000);
+}
+
+function pauseTimer() {
+  clearInterval(timerInterval);
+  currentTimer.isRunning = false;
+  mb.window.webContents.send('timer-paused', currentTimer);
+}
+
+// IPC handlers
+ipcMain.handle('start-timer', async (event, { initialTime, isFocusTime }) => {
+  startTimer(initialTime, isFocusTime);
+  return currentTimer;
+});
+
+ipcMain.handle('pause-timer', async () => {
+  pauseTimer();
+  return currentTimer;
+});
+
+ipcMain.handle('get-timer-state', async () => {
+  return currentTimer;
+});
 
 // Get graph data from database
 async function getGraphData(timeRange, timeType = 'focus') {

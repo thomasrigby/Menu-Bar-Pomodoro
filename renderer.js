@@ -25,6 +25,19 @@ window.addEventListener('DOMContentLoaded', () => {
     completed: false
   };
 
+  // Initialize default state
+  focusSection.classList.remove('hidden');
+  breakSection.classList.add('hidden');
+  focusSection.style.opacity = '1';
+  focusSection.style.visibility = 'visible';
+  breakSection.style.opacity = '0';
+  breakSection.style.visibility = 'hidden';
+  startButton.dataset.mode = 'focus';
+  
+  // Set initial times
+  updateDigitBoxes(focusDigits, savedFocusTime);
+  updateDigitBoxes(breakDigits, savedBreakTime);
+
   // Calculate the circumference of the circle
   const radius = 45;
   const circumference = radius * 2 * Math.PI;
@@ -37,13 +50,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Function to save timer state
   function saveTimerState() {
-    localStorage.setItem('timerState', JSON.stringify({
+    const state = {
       isFocusTime,
       isRunning,
       savedFocusTime,
       savedBreakTime,
-      currentSessionData
-    }));
+      currentSessionData,
+      timeLeft: getTimeFromDigits(isFocusTime ? focusDigits : breakDigits),
+      initialTime: isFocusTime ? savedFocusTime : savedBreakTime
+    };
+    localStorage.setItem('timerState', JSON.stringify(state));
   }
 
   // Function to restore timer state
@@ -51,9 +67,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const savedState = localStorage.getItem('timerState');
     if (savedState) {
       const state = JSON.parse(savedState);
-      // Always start in focus mode when first loading
-      isFocusTime = true;
-      isRunning = false; // Always start paused when restoring
+      isFocusTime = state.isFocusTime;
+      isRunning = state.isRunning;
       savedFocusTime = state.savedFocusTime;
       savedBreakTime = state.savedBreakTime;
       currentSessionData = state.currentSessionData || {
@@ -63,16 +78,31 @@ window.addEventListener('DOMContentLoaded', () => {
         completed: false
       };
 
-      // Always start with focus UI
-      startButton.dataset.mode = 'focus';
-      switchTimerSection(false);
-      focusSection.style.opacity = '1';
-      focusSection.style.visibility = 'visible';
-      breakSection.style.opacity = '0';
-      breakSection.style.visibility = 'hidden';
+      // Restore the correct UI state
+      startButton.dataset.mode = isFocusTime ? 'focus' : 'break';
+      startButton.dataset.playing = isRunning ? "true" : "false";
       
-      updateDigitBoxes(focusDigits, savedFocusTime);
-      updateDigitBoxes(breakDigits, savedBreakTime);
+      // Only switch to break section if there's an active timer in break mode
+      if (isRunning && !isFocusTime) {
+        switchTimerSection(true);
+      } else {
+        switchTimerSection(false);
+      }
+
+      // If timer was running, restore it with correct time
+      if (isRunning) {
+        const currentDigits = isFocusTime ? focusDigits : breakDigits;
+        updateDigitBoxes(currentDigits, state.timeLeft);
+        [...focusDigits, ...breakDigits].forEach(digit => digit.disabled = true);
+        const currentProgressRing = isFocusTime ? focusProgressRing : breakProgressRing;
+        const remainingPortions = (state.timeLeft / state.initialTime) * 100;
+        setProgress(currentProgressRing, remainingPortions);
+        timerInterval = setInterval(() => runTimer(state.initialTime), 1000);
+      } else {
+        // If not running, just restore the saved times
+        updateDigitBoxes(focusDigits, savedFocusTime);
+        updateDigitBoxes(breakDigits, savedBreakTime);
+      }
     }
   }
 
@@ -93,18 +123,21 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Function to complete a Pomodoro session
   async function completeSession(wasCompleted = true) {
-    if (currentSessionData.startTime) {
-      // Update the session data with current state
-      currentSessionData.completed = wasCompleted;
-      currentSessionData.sessionType = isFocusTime ? 'focus' : 'break';
-      currentSessionData.duration = getTimeFromDigits(isFocusTime ? focusDigits : breakDigits);
-      
+    if (currentSessionData.startTime && wasCompleted) {
+      // Only log the session if it was actually completed
       try {
         await window.electron.ipcRenderer.invoke('log-pomodoro-session', currentSessionData);
       } catch (error) {
         console.error('Error logging session:', error);
       }
     }
+    // Reset the session data regardless of completion
+    currentSessionData = {
+      startTime: null,
+      duration: 0,
+      sessionType: isFocusTime ? 'focus' : 'break',
+      completed: false
+    };
   }
 
   // Function to switch timer sections
@@ -165,7 +198,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (timeLeft <= 0) {
       clearInterval(timerInterval);
       isRunning = false;
-      playTimerEndSound();
       
       // Complete the current session with the current mode type
       completeSession(true);
@@ -202,10 +234,13 @@ window.addEventListener('DOMContentLoaded', () => {
     const portionPerTick = 100 / initialTime;
     const remainingPortions = timeLeft * portionPerTick;
     setProgress(currentProgressRing, remainingPortions);
+    
+    // Save state after each tick
+    saveTimerState();
   }
 
   // Function to start timer (either focus or break)
-  function startTimer(isBreak = false) {
+  async function startTimer(isBreak = false) {
     if (isRunning) return;
 
     isRunning = true;
@@ -216,28 +251,96 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Set initial time and progress when starting
     const currentDigits = isBreak ? breakDigits : focusDigits;
-    const currentProgressRing = isBreak ? breakProgressRing : focusProgressRing;
     const initialTime = getTimeFromDigits(currentDigits);
     
     // Set full circle at start
+    const currentProgressRing = isBreak ? breakProgressRing : focusProgressRing;
     setProgress(currentProgressRing, 100);
     
     // Disable all digit inputs while timer is running
     [...focusDigits, ...breakDigits].forEach(digit => digit.disabled = true);
     
     startButton.dataset.playing = "true";
-    timerInterval = setInterval(() => runTimer(initialTime), 1000);
+
+    // Start timer in main process
+    await window.electron.ipcRenderer.invoke('start-timer', {
+      initialTime,
+      isFocusTime: !isBreak
+    });
   }
 
+  // Set up timer event listeners
+  window.electron.ipcRenderer.on('timer-tick', (timerState) => {
+    const currentDigits = timerState.isFocusTime ? focusDigits : breakDigits;
+    const currentProgressRing = timerState.isFocusTime ? focusProgressRing : breakProgressRing;
+    
+    updateDigitBoxes(currentDigits, timerState.timeLeft);
+    const remainingPortions = (timerState.timeLeft / timerState.initialTime) * 100;
+    setProgress(currentProgressRing, remainingPortions);
+    saveTimerState();
+  });
+
+  // Function to play sound
+  function playTimerEndSound() {
+    if (!isMuted && timerSound) {
+      timerSound.currentTime = 0;
+      timerSound.play().catch(error => console.log('Error playing sound:', error));
+    }
+  }
+
+  // Listen for sound play requests
+  window.electron.ipcRenderer.on('play-sound', () => {
+    playTimerEndSound();
+  });
+
+  window.electron.ipcRenderer.on('timer-complete', async (timerState) => {
+    isRunning = false;
+    
+    // Play sound when timer completes
+    playTimerEndSound();
+    
+    // Complete the current session
+    await completeSession(true);
+
+    // Switch to the opposite timer mode
+    isFocusTime = !timerState.isFocusTime;
+    startButton.dataset.mode = isFocusTime ? 'focus' : 'break';
+    startButton.dataset.playing = "false";
+    
+    // Enable the appropriate digit inputs and reset the other timer
+    if (isFocusTime) {
+      focusDigits.forEach(digit => digit.disabled = false);
+      updateDigitBoxes(breakDigits, savedBreakTime);
+      setProgress(breakProgressRing, 100);
+    } else {
+      breakDigits.forEach(digit => digit.disabled = false);
+      updateDigitBoxes(focusDigits, savedFocusTime);
+      setProgress(focusProgressRing, 100);
+    }
+
+    // Switch the display
+    switchTimerSection(!isFocusTime);
+    
+    // Start a new session for the next timer
+    startNewSession(!isFocusTime);
+    saveTimerState();
+  });
+
   // Start button click handler
-  startButton.addEventListener('click', () => {
+  startButton.addEventListener('click', async () => {
     if (isRunning) {
-      // If timer is running, pause it and log as incomplete
-      clearInterval(timerInterval);
+      // If timer is running, pause it
+      await window.electron.ipcRenderer.invoke('pause-timer');
       isRunning = false;
       startButton.dataset.playing = "false";
-      completeSession(false);
       [...focusDigits, ...breakDigits].forEach(digit => digit.disabled = false);
+      // Don't log incomplete sessions
+      currentSessionData = {
+        startTime: null,
+        duration: 0,
+        sessionType: isFocusTime ? 'focus' : 'break',
+        completed: false
+      };
       return;
     }
 
@@ -258,7 +361,13 @@ window.addEventListener('DOMContentLoaded', () => {
       clearInterval(timerInterval);
       isRunning = false;
       startButton.dataset.playing = "false";
-      completeSession(false);
+      // Don't log incomplete sessions when resetting
+      currentSessionData = {
+        startTime: null,
+        duration: 0,
+        sessionType: isFocusTime ? 'focus' : 'break',
+        completed: false
+      };
     }
 
     // Always switch to focus mode
@@ -345,15 +454,22 @@ window.addEventListener('DOMContentLoaded', () => {
     volumeIcon.classList.toggle('muted', isMuted);
   });
 
-  // Function to play sound
-  function playTimerEndSound() {
-    if (!isMuted && timerSound) {
-      timerSound.currentTime = 0;
-      timerSound.play().catch(error => console.log('Error playing sound:', error));
-    }
-  }
-
   // Initialize progress rings
   setProgress(focusProgressRing, 100);
   setProgress(breakProgressRing, 100);
+
+  // When page loads, check if timer is running
+  window.addEventListener('DOMContentLoaded', async () => {
+    const timerState = await window.electron.ipcRenderer.invoke('get-timer-state');
+    if (timerState.isRunning) {
+      isRunning = true;
+      isFocusTime = timerState.isFocusTime;
+      startButton.dataset.playing = "true";
+      startButton.dataset.mode = isFocusTime ? 'focus' : 'break';
+      const currentDigits = isFocusTime ? focusDigits : breakDigits;
+      updateDigitBoxes(currentDigits, timerState.timeLeft);
+      [...focusDigits, ...breakDigits].forEach(digit => digit.disabled = true);
+      switchTimerSection(!isFocusTime);
+    }
+  });
 });

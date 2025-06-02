@@ -240,32 +240,7 @@
         document.getElementById('backButton').addEventListener('click', async function(e) {
             e.preventDefault(); // Prevent immediate navigation
             
-            // Check if there's an ongoing session that needs to be completed
-            const savedState = localStorage.getItem('timerState');
-            if (savedState) {
-                const state = JSON.parse(savedState);
-                if (state.isRunning && state.currentSessionData) {
-                    // Complete the session as incomplete since user is navigating away
-                    try {
-                        const now = new Date();
-                        now.setHours(now.getHours() + 8); // Add 8 hours for UTC+8
-                        await window.electron.ipcRenderer.invoke('log-pomodoro-session', {
-                            startTime: now.toISOString(),
-                            duration: state.isFocusTime ? state.savedFocusTime : state.savedBreakTime,
-                            sessionType: state.isFocusTime ? 'focus' : 'break',
-                            completed: false
-                        });
-                    } catch (error) {
-                        console.error('Error logging incomplete session:', error);
-                    }
-                    
-                    // Update state to not running
-                    state.isRunning = false;
-                    localStorage.setItem('timerState', JSON.stringify(state));
-                }
-            }
-            
-            // Navigate back to the timer
+            // Simply navigate back to the timer without affecting the timer state
             window.location.href = 'index.html';
         });
 
@@ -318,16 +293,21 @@
 
         async function updateGraph() {
             const timeRange = document.getElementById('timeRange').value;
+            
             try {
                 const data = await window.electron.ipcRenderer.invoke('get-graph-data', { 
-                    timeRange,
-                    timeType: currentTimeType
+                    timeRange, 
+                    timeType: currentTimeType 
                 });
+
+                // Update summary stats
+                updateSummaryStats(data.summary);
                 
+                // Update or create chart
                 if (focusChart) {
                     focusChart.destroy();
                 }
-
+                
                 const ctx = document.getElementById('focusChart').getContext('2d');
                 focusChart = new Chart(ctx, {
                     type: 'line',
@@ -399,9 +379,6 @@
                         }
                     }
                 });
-
-                // Update summary statistics
-                updateSummaryStats(data.summary);
 
             } catch (error) {
                 console.error('Error updating graph:', error);
